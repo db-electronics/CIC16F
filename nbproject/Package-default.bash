@@ -10,9 +10,9 @@ CND_CONF=default
 CND_DISTDIR=dist
 TMPDIR=build/${CND_CONF}/${IMAGE_TYPE}/tmp-packaging
 TMPDIRNAME=tmp-packaging
-OUTPUT_PATH=dist/${CND_CONF}/${IMAGE_TYPE}/CIC16F.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
-OUTPUT_BASENAME=CIC16F.X.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
-PACKAGE_TOP_DIR=cic16f.x/
+OUTPUT_PATH=dist/${CND_CONF}/${IMAGE_TYPE}/CIC16F.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
+OUTPUT_BASENAME=CIC16F.${IMAGE_TYPE}.${OUTPUT_SUFFIX}
+PACKAGE_TOP_DIR=cic16f/
 
 # Functions
 function checkReturnCode
@@ -57,15 +57,15 @@ mkdir -p ${TMPDIR}
 
 # Copy files and create directories and links
 cd "${TOP}"
-makeDirectory ${TMPDIR}/cic16f.x/bin
+makeDirectory ${TMPDIR}/cic16f/bin
 copyFileToTmpDir "${OUTPUT_PATH}" "${TMPDIR}/${PACKAGE_TOP_DIR}bin/${OUTPUT_BASENAME}" 0755
 
 
 # Generate tar file
 cd "${TOP}"
-rm -f ${CND_DISTDIR}/${CND_CONF}/package/cic16f.x.tar
+rm -f ${CND_DISTDIR}/${CND_CONF}/package/cic16f.tar
 cd ${TMPDIR}
-tar -vcf ../../../../${CND_DISTDIR}/${CND_CONF}/package/cic16f.x.tar *
+tar -vcf ../../../../${CND_DISTDIR}/${CND_CONF}/package/cic16f.tar *
 checkReturnCode
 
 # Cleanup

@@ -19,13 +19,17 @@
  __CONFIG _CONFIG5, _CP_OFF 
 ;************************************************************************
  
-mem	udata   0x20
-lock	res	0x10
-key	res	0x10
-x	res	1
-swait	res	1
-lwait	res	1
+mem	    udata   0x20
+lock	    res	    0x10
+key	    res	    0x10
+x	    res	    1
+swait	    res	    1
+lwait	    res	    1
 
+dout	    equ	    0		; data out is bit0 of GPIO
+din	    equ	    1		; data in is bit1 of GPIO
+led	    equ	    4
+	
 ;************************************************************************
 ; macros
 loadlock    macro L1,L2,L3,L4,L5,L6,L7,L8,L9,LA,LB,LC,LD,LE,LF
@@ -98,21 +102,51 @@ loadkey	    macro K2,K3,K4,K5,K6,K7,K8,K9,KA,KB,KC,KD,KE,KF
 	goto	main
 isr
 	org	0x0004
-	bcf	INTCON, 1	; clear interrupt flag
+	bcf	PIE0, 0		; clear interrupt flag
 	bsf	INTCON, 7	; re-enable interrupts
  
-main
-	movlw	0x87
-	movwf	FSR0H
-	movlw	0x80
-	movwf	FSR0L
+; 2 cycles to here from POR or ISR
+main				
+	banksel ANSELA
+	clrf	ANSELA		; Digital I/O
+	banksel TRISA
+	movlw	B'00101110'	; 5 = in, 4 = out, 3 = in, 2 = in, 1 = in, 0 = out
+	movwf	TRISA
+	banksel	WPUA
+	movlw	B'00100100'	; weak pull-up on 5 and 2
+	movwf	WPUA
+	banksel INTCON
+	movlw	0x80		; global enable interrupts + GP2 falling edge int
+	movwf	INTCON
+	banksel PIE0
+	movlw	0x01		; enable external interrupts
+	movwf	PIE0
+	banksel PORTA
 
+; timing critical section here,
+; lock sends stream ID. 15 cycles per bit--------
+; stream id read at 34th, 49th, 64th and 79th cycles
+	
 doneload	
 loop	
-	moviw	FSR0++
 	goto	loop
 
+; --------wait: 3*(W-1)+7 cycles (including call+return). W=0 -> 256!--------
+wait			    ; 2 for call
+	movwf	swait	    ; 1
+wait0	decfsz	swait, f    ; 1 / 2 last pass
+	goto	wait0	    ; 2
+	return		    ; 2
 
+; --------wait long: 8+(3*(w-1))+(772*w). W=0 -> 256!--------
+longwait
+	movwf	lwait
+	clrw
+longwait0
+	call	wait
+	decfsz	lwait, f
+	goto	longwait0
+	return
 	
 ; -----------------------------------------------------------------------
 ; 3193 - USA/Canada 
