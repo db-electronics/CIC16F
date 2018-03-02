@@ -115,6 +115,7 @@
       <Simulator>
         <property key="W0102_SIM_PERIPH_MISSING" value="report"/>
         <property key="W0106_SIM_PERIPH_PARTIAL_SUPPORT" value="report"/>
+        <property key="W1600_PPS_INVALID_MAP" value="report"/>
       </Simulator>
       <mpasmsuite>
         <property key="absolute-mode" value="false"/>
