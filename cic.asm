@@ -324,23 +324,27 @@ die
 	bcf	NVMCON1, NVMREGS
 	bsf	NVMCON1, RD
 	movf	NVMDATL, W
-	movwf	INDF0		    ; store region in INDFO for now
+	addlw	0x01		    ; increment to next region
+	andlw	0x03		    ; overflow
+	movwf	INDF0		    ; store new region in INDFO for now
 	
 	; erase row
 	bsf	NVMCON1, FREE
 	bsf	NVMCON1, WREN
-	bcf	INTCON, GIE
-	movlw	0x55
-	movwf	NVMCON2
-	movlw	0xAA
-	movwf	NVMCON2
-	bsf	NVMCON1, WR
-	bsf	INTCON, GIE
+	call	nvm_unlock
 	bcf	NVMCON1, WREN
 	
-	
-	
-; --------get caught up--------
+	; write new region
+	bsf	NVMCON1, WREN
+	bsf	NVMCON1, LWLO
+	movf	INDF0, W	    ; load region
+	movwf	NVMDATL		    ; to low byte
+	clrf	NVMDATH		    ; just for completeness
+	bcf	NVMCON1, LWLO
+	call	nvm_unlock
+	bcf	NVMCON1, WREN
+
+	; die forever
 	banksel PORTA
 dietrap
 	bsf	PORTA, led	; LED on
@@ -348,7 +352,16 @@ dietrap
 	nop
 	bcf	PORTA, led	; LED on
 	goto	dietrap	
-	
+
+nvm_unlock
+	bcf	INTCON, GIE
+	movlw	0x55
+	movwf	NVMCON2
+	movlw	0xAA
+	movwf	NVMCON2
+	bsf	NVMCON1, WR
+	bsf	INTCON, GIE
+	return
 	
 ;************************************************************************
 ; 3193 - USA/Canada 
@@ -402,6 +415,6 @@ load3197
 
 ;************************************************************************
 	org 0x780
-region	db	0x01, 0x01  ; default to NA region because we're the center of the world
+region	db	0x00, 0x00  ; default to NA region because we're the center of the world
 	
 end
