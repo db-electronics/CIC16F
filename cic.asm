@@ -96,8 +96,9 @@ loadkey	    macro K2,K3,K4,K5,K6,K7,K8,K9,KA,KB,KC,KD,KE,KF
 	movwf 	key+0xF
     endm
 	
- ;***********************************************************************
+;***********************************************************************
 ; program start
+;***********************************************************************
 	org	0x0000
 	goto	main
 isr
@@ -169,7 +170,7 @@ main
 ; 154 - 80 = 74 cycles to load
 ; curent region is stored in program flash, load and call proper loading subroutine
 	
-	moviw	0[FSR1]		; read lock/key offset for computed goto
+	moviw	0[INDF1]		; read lock/key offset for computed goto
 	
 ; 85 cycles
 ; 0x00 = 3193 - USA/Canada
@@ -185,7 +186,7 @@ main
 	
 doneload	
 	
-; 147 cycles
+; 146 cycles
 ;	clrf	FSR0H		; setup pointers
 	movlw	LOW lock	; FSR0 points to lock/key region
 	movwf	FSR0L
@@ -193,6 +194,8 @@ doneload
 	movlw	LOW x		; FSR1 points to X register emulator
 	movwf	FSR1L
 	banksel	PORTA		; just to be sure
+	nop
+	nop
 	
 ;************************************************************************
 ; 154 cycles to main loop
@@ -205,17 +208,17 @@ mainloop54
 	bcf	FSR0L, 4	; lbmi 0
 			    ; ** 156 - in sync
 	call	nextstreambit	; tml 147 - 10 cycles + 2 for call
-			    ; ** 168 - in sync
+			    ; ** 169 - 1 behind
 	bsf	FSR0L, 4	; lbmi 1 - setting bit 4 changes 0x20 to 0x30
 	call	nextstreambit	; tml 147 - 10 cycles + 2 for call
-			    ; ** 181 - in sync
+			    ; ** 182 - 1 behind
 	movlw	LOW key		; tml 174 ; H := 1 in key mode, 10 cycles + 2 for call
 	movwf	FSR0L
-			    ; ** 183 - ahead by 10 cycles
+			    ; ** 184 - ahead by 9 cycles
 	movlw	0x2		; burn 13 cycles
 	call	wait		; need to skip over 3 useless instructions here
 	nop			; tengen code tests din here (segher does not), maybe add this
-	nop
+	
 			    ; ** 197 - in sync
 	movlw	INDF0		; ldi 0, x
 	clrf	INDF0		; ldi 0, x
@@ -228,7 +231,6 @@ mainloop54
 	movwf	INDF0		; s - store input bit
 			    ; ** 204 - in sync
 
-			    
 ; check if input bit matches what we output
 	; din = 0x30.1 (keyseed)
 	; calc = 0x20.0 (lockseed)
@@ -246,15 +248,81 @@ rcvdOne
 			    ; ** 210 - 20 cycles ahead
 endCheckDin
 		
+;04a: 5d      xax
+;025: 01      adi 1	
+;012: 9c      t 01c	; if A = 0 {
+	incf	x, f		; A := X + 1 ; skip if overflow
+	btfsc	x, 4		; bit 4 is carry bit
+	goto	rstLoop54	
+			    ; ** 214 when taking goto (no carry)
+			    
+;009: 7c af   tml 12f	;	call 12f	// run host
+	call	runhost		; 7 cycles + 2 for call			    
+			    
+;042: 7d de   tml 35e	;	call 35e	// mangle both
+	call	mangleboth			    
+			    
+;010: 27      lbli 7	;	L := 7
+	movlw	0x0F
+	iorwf	FSR0L, f
+	bcf	FSR0L, 3			    
+	
+;048: 40      l		;	A := [H:7]
+;064: 10      skai 0	;	if [H:7] <> 0
+	btfsc	INDF0, 0	
 
-			    
-			    
-			    
-			    
-			    
-			    
+;072: a8      t 028	;		goto 028
+	goto	mainloop28
+;			;	else
+;039: d1      t 051	;		goto 051
 	goto	mainloop
+;			; }
+	
+rstLoop54
+	; got here with 214 cycles, CIC jumps back to 0x054 at 235
+	; burn 21 cycles - 2 for goto
+	movlw	0x4		; wait = (3*W) + 5
+	call	wait		; burn 17 cycles
+	nop
+	goto	mainloop54
+			    ; ** 235 after goto - in sync
 
+			    
+;************************************************************************
+mangleboth
+;************************************************************************
+;			;; MANGLE BOTH
+;35e: 74      lbmi 0	; H := 0        	// 1 
+	bcf	FSR0L, 4
+;32f: 7d f5   tml 375	; call 375		// mangle one
+	call	mangleone
+;36b: 75      lbmi 1	; H := 1
+	bsf	FSR0L, 4
+;			;			// mangle one			    
+			    
+mangleone
+;375: 2f      lbli f				// 1
+;33a: 40      l		; A := [H:f]		// 2
+	moviw	0xF[INDF0], w	
+;31d: 5c      lxa	;	X := A		// 3
+	movwf	x	
+;30e: 48      sc				// 4
+	bsf	STATUS, c
+;307: 21      lbli 1				// 5
+;343: 72      adc				// 6
+;361: 4a      s		;	[H:1] += X + 1  // 7
+	addwfc	0x1[INDF0], f		
+;330: 52      li				// 8 - A = M, BL++
+	moviw	[INDF0]++
+;358: 72      adc				// 9 - A = A + M(02) + C	
+	addwf	INDF0, w
+	andlw	0x0F
+;36c: 54      coma				// 10	
+	xorlw	0xFF
+;376: 42      xi		;	A := [H:2] ; [H:2] = ~([H:1] + [H:2] + 1) ; L := 3  	// 11	
+	
+	
+	return
 	
 ;************************************************************************
 runhost
@@ -289,7 +357,8 @@ nsbskip
 
 	
 ;************************************************************************	
-; --------wait: 3*(W-1)+7 cycles (including call+return). W=0 -> 256!--------
+; wait: 3*(W-1)+7 cycles (including call+return). W=0 -> 256!
+;************************************************************************
 wait			    ; 2 for call
 	movwf	swait	    ; 1
 wait0	decfsz	swait, f    ; 1 / 2 last pass
@@ -297,7 +366,8 @@ wait0	decfsz	swait, f    ; 1 / 2 last pass
 	return		    ; 2
 
 ;************************************************************************
-; --------wait long: 8+(3*(w-1))+(772*w). W=0 -> 256!--------
+; wait long: 8+(3*(w-1))+(772*w). W=0 -> 256!
+;************************************************************************
 longwait
 	movwf	lwait
 	clrw
@@ -309,11 +379,12 @@ longwait0
 
 	
 ;************************************************************************
-;-- change region in eeprom and die
+; change region in eeprom and die
 ; 0x00 = 3193 - USA/Canada
 ; 0x01 = 3195 - Europe
 ; 0x02 = 3196 - Asia 
 ; 0x03 = 3197 - UK/Italy/Australia
+;************************************************************************
 die
 	; get current region byte
 	banksel NVMADRL		    
@@ -352,7 +423,10 @@ dietrap
 	nop
 	bcf	PORTA, led	; LED on
 	goto	dietrap	
-
+	
+;************************************************************************
+; unlock sequence for NVM erase/write operations
+;************************************************************************
 nvm_unlock
 	bcf	INTCON, GIE
 	movlw	0x55
