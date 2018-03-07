@@ -303,23 +303,29 @@ mangleboth
 mangleone
 ;375: 2f      lbli f				// 1
 ;33a: 40      l		; A := [H:f]		// 2
-	moviw	0xF[INDF0], w	
+	moviw	0xF[FSR0]	
 ;31d: 5c      lxa	;	X := A		// 3
 	movwf	x	
 ;30e: 48      sc				// 4
-	bsf	STATUS, c
+	bsf	STATUS, C
 ;307: 21      lbli 1				// 5
+	incf	FSR0L
 ;343: 72      adc				// 6
 ;361: 4a      s		;	[H:1] += X + 1  // 7
-	addwfc	0x1[INDF0], f		
+	
+	addwfc	INDF0, f		
 ;330: 52      li				// 8 - A = M, BL++
-	moviw	[INDF0]++
+	moviw	[FSR0]++
 ;358: 72      adc				// 9 - A = A + M(02) + C	
 	addwf	INDF0, w
+	btfsc	WREG, 4	    ; check for overflow
+	
+	
 	andlw	0x0F
 ;36c: 54      coma				// 10	
 	xorlw	0xFF
 ;376: 42      xi		;	A := [H:2] ; [H:2] = ~([H:1] + [H:2] + 1) ; L := 3  	// 11	
+	
 	
 	
 	return
@@ -491,4 +497,4 @@ load3197
 	org 0x780
 region	db	0x00, 0x00  ; default to NA region because we're the center of the world
 	
-end
+    end
