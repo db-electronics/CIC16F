@@ -23,6 +23,8 @@ mem	    udata   0x20
 lock	    res	    0x10
 key	    res	    0x10
 x	    res	    1
+reg0	    res	    1
+reg1	    res	    1
 swait	    res	    1
 lwait	    res	    1
 
@@ -170,7 +172,7 @@ main
 ; 154 - 80 = 74 cycles to load
 ; curent region is stored in program flash, load and call proper loading subroutine
 	
-	moviw	0[INDF1]		; read lock/key offset for computed goto
+	movf	INDF1, W		; read lock/key offset for computed goto
 	
 ; 85 cycles
 ; 0x00 = 3193 - USA/Canada
@@ -293,41 +295,160 @@ mangleboth
 ;************************************************************************
 ;			;; MANGLE BOTH
 ;35e: 74      lbmi 0	; H := 0        	// 1 
-	bcf	FSR0L, 4
 ;32f: 7d f5   tml 375	; call 375		// mangle one
-	call	mangleone
+	call	manglelock
 ;36b: 75      lbmi 1	; H := 1
-	bsf	FSR0L, 4
-;			;			// mangle one			    
+	call	manglekey
+;			;			// mangle one	
+	return
 			    
-mangleone
+;************************************************************************	
+manglelock
+;************************************************************************
 ;375: 2f      lbli f				// 1
 ;33a: 40      l		; A := [H:f]		// 2
-	moviw	0xF[FSR0]	
+	bcf	FSR0L, 4	; point to lock
+	moviw	0xF[INDF0]	
 ;31d: 5c      lxa	;	X := A		// 3
 	movwf	x	
+	
 ;30e: 48      sc				// 4
-	bsf	STATUS, C
+lockloop
+	addlw	0x01
 ;307: 21      lbli 1				// 5
-	incf	FSR0L
+	incf	FSR0L	    ; should be 0 when entering manglelock
 ;343: 72      adc				// 6
 ;361: 4a      s		;	[H:1] += X + 1  // 7
+	addwf	INDF0, F
 	
-	addwfc	INDF0, f		
 ;330: 52      li				// 8 - A = M, BL++
-	moviw	[FSR0]++
+	movf	lock+0x2, W
+	movwf	reg0		; store L:2
+	moviw	INDF0++		; A = L:1, L++
+	
 ;358: 72      adc				// 9 - A = A + M(02) + C	
-	addwf	INDF0, w
-	btfsc	WREG, 4	    ; check for overflow
+	addwf	INDF0, F
+	incf	INDF0, F
 	
-	
-	andlw	0x0F
 ;36c: 54      coma				// 10	
-	xorlw	0xFF
-;376: 42      xi		;	A := [H:2] ; [H:2] = ~([H:1] + [H:2] + 1) ; L := 3  	// 11	
+	comf	INDF0, F
 	
+;376: 42      xi		;	A := [H:2] ; [H:2] = ~([H:1] + [H:2] + 1) ; L := 3  	// 11
+	moviw	++INDF0	    ; A = L:3
+	movwf	reg1	    ; store L:3
+	movlw	0x0F
+	andwf	INDF0, F
+	movf	reg0, W	    ; restore L:2
+	andlw	0x0F	    ; mask off higher nibble
 	
+;33b: 73      adcsk	;	A += [H:3] + 1 ; if no carry:				// 12
+	addwf	INDF0, F
+	incf	INDF0, F
+	btfsc	INDF0, 4
+	goto	locknoskip
 	
+;35d: 42      xi		;		t = A ; A := [H:3] ; [H:3] := t ; L++		// 13	
+	; skipped
+	
+;32e: 70      ad								// 14
+	movf	reg1, W	    ; restore L:3
+;317: 4a      s		;	[H:L] += A				// 15
+	addwf	lock+0x4, F ; add to L:4
+	
+;34b: 52      li		;	A := [H:L] ; L++			// 16
+	movf	lock+0x5, W	
+	movwf	reg0	    ; store L:5
+	moviw	++INDF0	    ; get L:4, L = 4
+	
+;365: 49      rc		;	C := 0					// 17
+;332: 72      adc	;	A += [H:L]				// 18
+	addwf	lock+0x5, F
+	
+;319: 42      xi		;	t = [H:L] ; [H:L] := A ; A := t ; L++	// 19
+	movf	lock+0x6, W
+	movwf	reg1	    ; store L:6
+	movf	reg0, W	    ; restore L:5
+	
+;30c: 08      adi 8	;	A += 8 ; if no carry:			// 20
+	andlw	0x0F
+	addlw	0x08
+	btfss	WREG, 4	    ; check for carry
+	
+;346: 72      adc	;		A += [H:L]			// 21
+	addwf	lock+0x6, W
+	
+;323: 42      xi		;	t = [H:L] ; [H:L] := A ; A := t ; L++	// 22
+	movwf	lock+0x6
+	movf	reg1, W	    ; restore L:6
+;			
+	; loop begings here, L = 4 at this point, needs to point to L:7 to start
+	addfsr	FSR0, 0x3
+	
+;351: 01      adi 1		// 23
+;328: 00      nop		// 24
+	addlw	0x01
+;354: 72      adc		// 25
+;36a: 4a      s			// 26
+	addwf	INDF0, F    ; add to L:7
+	
+;335: 52      li			// 27 - skip if overflow
+	moviw	INDF0++	    ; 
+	
+;31a: d1      t 351		
+	
+	addlw	0x01
+	addwf	INDF0, F    ; add to L:8
+	moviw	INDF0++
+	
+	addlw	0x01
+	addwf	INDF0, F    ; add to L:9
+	moviw	INDF0++
+	
+	addlw	0x01
+	addwf	INDF0, F    ; add to L:A
+	moviw	INDF0++
+	
+	addlw	0x01
+	addwf	INDF0, F    ; add to L:B
+	moviw	INDF0++
+	
+	addlw	0x01
+	addwf	INDF0, F    ; add to L:C
+	moviw	INDF0++
+	
+	addlw	0x01
+	addwf	INDF0, F    ; add to L:D
+	moviw	INDF0++
+	
+	addlw	0x01
+	addwf	INDF0, F    ; add to L:E
+	moviw	INDF0++
+	
+	addlw	0x01
+	addwf	INDF0, F    ; add to L:F
+	
+;30d: 5d      xax
+;306: 0f      adi f
+	movlw	0x0F
+	andwf	x, F
+	addwf	x, F
+	
+	; get back in sync
+	btfss	x, 4	    ; check for overflow
+;303: 4c      rit
+	goto	lockreturn
+	nop
+	goto	lockloop
+;341: 9d      t 31d	
+
+lockreturn
+locknoskip
+	
+	return
+
+;************************************************************************	
+manglekey
+;************************************************************************
 	return
 	
 ;************************************************************************
