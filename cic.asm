@@ -293,27 +293,28 @@ rstLoop54
 ;************************************************************************
 mangleboth
 ;************************************************************************
-;			;; MANGLE BOTH
-;35e: 74      lbmi 0	; H := 0        	// 1 
-;32f: 7d f5   tml 375	; call 375		// mangle one
-	call	manglelock
+			;; MANGLE BOTH
+;35e: 74      lbmi 0	; H := 0        // 1 
+	bcf	FSR0L, 4	; point to lock
+;32f: 7d f5   tml 375	; call 375	// mangle one
+	call	mangle		
+			
 ;36b: 75      lbmi 1	; H := 1
-	call	manglekey
-;			;			// mangle one	
-	return
+	bsf	FSR0L, 4	; point to lock
+	nop
+			;		// mangle one
 			    
 ;************************************************************************	
-manglelock
+mangle
 ;************************************************************************
 ;375: 2f      lbli f				// 1
 ;33a: 40      l		; A := [H:f]		// 2
-	bcf	FSR0L, 4	; point to lock
 	moviw	0xF[INDF0]	
+	
+mangleloop
 ;31d: 5c      lxa	;	X := A		// 3
 	movwf	x	
-	
 ;30e: 48      sc				// 4
-lockloop
 	addlw	0x01
 ;307: 21      lbli 1				// 5
 	incf	FSR0L	    ; should be 0 when entering manglelock
@@ -322,10 +323,10 @@ lockloop
 	addwf	INDF0, F
 	
 ;330: 52      li				// 8 - A = M, BL++
-	movf	lock+0x2, W
+	moviw	1[INDF0]	; load L:2, L = 1 here
 	movwf	reg0		; store L:2
 	moviw	INDF0++		; A = L:1, L++
-	
+				; L = 2
 ;358: 72      adc				// 9 - A = A + M(02) + C	
 	addwf	INDF0, F
 	incf	INDF0, F
@@ -345,7 +346,7 @@ lockloop
 	addwf	INDF0, F
 	incf	INDF0, F
 	btfsc	INDF0, 4
-	goto	locknoskip
+	goto	manglewithskip
 	
 ;35d: 42      xi		;		t = A ; A := [H:3] ; [H:3] := t ; L++		// 13	
 	; skipped
@@ -353,19 +354,20 @@ lockloop
 ;32e: 70      ad								// 14
 	movf	reg1, W	    ; restore L:3
 ;317: 4a      s		;	[H:L] += A				// 15
-	addwf	lock+0x4, F ; add to L:4
+	addfsr	FSR0, 0x1	; L = 4
+	addwf	INDF0, F ; add to L:4
 	
 ;34b: 52      li		;	A := [H:L] ; L++			// 16
-	movf	lock+0x5, W	
+	moviw	++INDF0	
 	movwf	reg0	    ; store L:5
-	moviw	++INDF0	    ; get L:4, L = 4
+	moviw	-1[INDF0]	    ; get L:4, L = 5
 	
 ;365: 49      rc		;	C := 0					// 17
 ;332: 72      adc	;	A += [H:L]				// 18
-	addwf	lock+0x5, F
+	addwf	INDF0, F
 	
 ;319: 42      xi		;	t = [H:L] ; [H:L] := A ; A := t ; L++	// 19
-	movf	lock+0x6, W
+	moviw	++INDF0	    ; L = 6
 	movwf	reg1	    ; store L:6
 	movf	reg0, W	    ; restore L:5
 	
@@ -375,14 +377,14 @@ lockloop
 	btfss	WREG, 4	    ; check for carry
 	
 ;346: 72      adc	;		A += [H:L]			// 21
-	addwf	lock+0x6, W
+	addwf	INDF0, W
 	
 ;323: 42      xi		;	t = [H:L] ; [H:L] := A ; A := t ; L++	// 22
-	movwf	lock+0x6
+	movwi	INDF0++
 	movf	reg1, W	    ; restore L:6
 ;			
 	; loop begings here, L = 4 at this point, needs to point to L:7 to start
-	addfsr	FSR0, 0x3
+	; addfsr	FSR0, 0x3
 	
 ;351: 01      adi 1		// 23
 ;328: 00      nop		// 24
@@ -391,10 +393,10 @@ lockloop
 ;36a: 4a      s			// 26
 	addwf	INDF0, F    ; add to L:7
 	
-;335: 52      li			// 27 - skip if overflow
+;335: 52      li		// 27 - skip if overflow
 	moviw	INDF0++	    ; 
 	
-;31a: d1      t 351		
+;31a: d1      t 351		// 28, 34, 40, 46, 52, 58, 64, 70, 76
 	
 	addlw	0x01
 	addwf	INDF0, F    ; add to L:8
@@ -427,29 +429,24 @@ lockloop
 	addlw	0x01
 	addwf	INDF0, F    ; add to L:F
 	
-;30d: 5d      xax
-;306: 0f      adi f
-	movlw	0x0F
-	andwf	x, F
-	addwf	x, F
-	
+	; 67 to here from mangle
 	; get back in sync
-	btfss	x, 4	    ; check for overflow
-;303: 4c      rit
-	goto	lockreturn
-	nop
-	goto	lockloop
-;341: 9d      t 31d	
+	
+;30d: 5d      xax	    // 77
+;306: 0f      adi f	    // 78, skip if x is not 0
+	
+	movf	x, W
+	decfsz	WREG
+;303: 4c      rit	    // 79
+	goto	manglereturn
+	goto	mangleloop
+;341: 9d      t 31d	    // 80
 
-lockreturn
-locknoskip
+manglereturn
+manglewithskip
 	
 	return
 
-;************************************************************************	
-manglekey
-;************************************************************************
-	return
 	
 ;************************************************************************
 runhost
@@ -566,52 +563,38 @@ nvm_unlock
 	
 ;************************************************************************
 ; 3193 - USA/Canada 
-; LOCK: 3952F20F9109997 - avrcic
-; LOCK: $1952f8271981115 - segher
 ; LOAD LOCK SEED (30 cycles)
 ; 30 + 28 + 2 for final goto = 60
 load3193
-	loadlock    0x1,0x9,0x5,0x2,0xF,0x8,0x2,0x7,0x1,0x9,0x8,0x1,0x1,0x1,0x5
-; 3193 - USA/Canada 
-; KEY: x952129F910DF97 - avrcic
-; KEY: $x95212171985715 - segher
+	loadlock    0x1,0x9,0x5,0x2,0xF,0x2,0x8,0x7,0x1,0x9,0x8,0x1,0x1,0x1,0x5
 	loadkey	    0x9,0x5,0x2,0x1,0x2,0x1,0x7,0x1,0x9,0x8,0x5,0x7,0x1,0x5
 	goto	doneload
 
 ;************************************************************************
 ; 3195 - Europe 
-; LOCK: $17BEF0AF5706617 
 ; LOAD LOCK SEED (30 cycles)
 ; 30 + 28 + 2 for final goto = 60
 load3195
-	loadlock    0x1,0x7,0xB,0xE,0xF,0x0,0xA,0xF,0x5,0x7,0x0,0x6,0x6,0x1,0x7
-; 3195 - Europe 
-; KEY: $x7BD309F6EF2F97 
-	loadkey	    0x7,0xB,0xD,0x3,0x0,0x9,0xF,0x6,0xE,0xF,0x2,0xF,0x9,0x7	
+	loadlock    0xF,0x7,0xB,0xE,0xF,0x0,0x2,0x7,0xD,0xF,0x8,0xE,0xE,0x9,0x5
+	loadkey	    0x7,0xB,0xD,0x3,0x0,0x1,0x7,0xE,0x6,0x7,0xA,0x7,0x1,0x5	
 	goto	doneload
 
 ;************************************************************************
 ; 3196 - Asia 
-; LOCK: 06AD70AF6EF666C  
 ; LOAD LOCK SEED (30 cycles)
 ; 30 + 28 + 2 for final goto = 60
 load3196
-	loadlock    0x0,0x6,0xA,0xD,0x7,0x0,0xA,0xF,0x6,0xE,0xF,0x6,0x6,0x6,0xC
-; 3196 - Asia
-; KEY: x6ADCF606EF2F97 
-	loadkey	    0x6,0xA,0xD,0xC,0xF,0x6,0x0,0x6,0xE,0xF,0x2,0xF,0x9,0x7	
+	loadlock    0xE,0x6,0xA,0xD,0x7,0x0,0x2,0x7,0xE,0x6,0x7,0xE,0xE,0xE,0xA
+	loadkey	    0x6,0xA,0xD,0xC,0xF,0xE,0x8,0xE,0x6,0x7,0xA,0x7,0x1,0x5	
 	goto	doneload
 	
 ;************************************************************************
 ; 3197 - UK/Italy/Australia  
-; LOCK: 558937A00E0D66D   
 ; LOAD LOCK SEED (30 cycles)
 ; 30 + 28 + 2 for final goto = 60
 load3197
-	loadlock    0x5,0x5,0x8,0x9,0x3,0x7,0xA,0x0,0x0,0xE,0x0,0xD,0x6,0x6,0xD
-; 3197 - UK/Italy/Australia
-; KEY: x79AA1E0D019D99 
-	loadkey	    0x7,0x9,0xA,0xA,0x1,0xE,0x0,0xD,0x0,0x1,0x9,0xD,0x9,0x9	
+	loadlock    0x3,0x5,0x8,0x9,0x3,0x7,0x2,0x8,0x8,0x6,0x8,0x5,0xE,0xE,0xB
+	loadkey	    0x7,0x9,0xA,0xA,0x1,0x6,0x8,0x5,0x8,0x9,0x1,0x5,0x1,0x7	
 	goto	doneload
 
 ;************************************************************************

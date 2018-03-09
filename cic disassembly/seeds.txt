@@ -32,8 +32,9 @@ and:
 LOCK: $3952F20F9109997 
 KEY:  $x952129F910DF97 
 
-and I'm confused, who is wrong?
 
-found a typo in my seed and wasn't sure how i pulled it off.. thought i double checked... anyway turns out a little typo in the side notes of the seghers dis-assembly was the culprit.. 1952f8271961115 is wrong.. the 0x6 (0b0110) should be 0x8 (0b1000) .. it's all good happens to the best of us .. surprised i didn't catch that though.. oh well
+PAL-B Segher
+LOCK: 0xF,0x7,0xB,0xE,0xF,0x8,0x2,0x7,0xD,0x7,0x8,0xE,0xE,0x1,0x5
+KEY:  0x0,0x7,0xB,0xD,0x1,0x2,0x1,0x7,0xE,0x6,0x7,0xA,0x7,0x1,0x5
 
 To convert a working tengen key to segher compatible: subtract 2 from nibbles 1 & F.  Invert bit 3 of nibbles 7-E.

@@ -537,7 +537,7 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 33a: 40      l		; A := [H:f]		// 2
 
 			; forever {
-31d: 5c      lxa	;	X := A		// 3
+31d: 5c      lxa	;	X := A		// 3, x is number of times to run through
 30e: 48      sc					// 4
 307: 21      lbli 1				// 5
 343: 72      adc				// 6
@@ -558,15 +558,15 @@ LOCK/-KEY --> | 4 P0.3        13 |  ?
 346: 72      adc	;		A += [H:L]			// 21
 323: 42      xi		;	t = [H:L] ; [H:L] := A ; A := t ; L++	// 22
 			
-351: 01      adi 1		// 23
-328: 00      nop		// 24
-354: 72      adc		// 25
-36a: 4a      s			// 26
-335: 52      li			// 27 - skip if overflow
-31a: d1      t 351		
-30d: 5d      xax
-306: 0f      adi f
-303: 4c      rit
+351: 01      adi 1		// 23, 29
+328: 00      nop		// 24, 30
+354: 72      adc		// 25, 31
+36a: 4a      s			// 26, 32
+335: 52      li			// 27, 33, skip if overflow
+31a: d1      t 351		// 28, 34, 40, 46, 52, 58, 64, 70, 76
+30d: 5d      xax		// 77
+306: 0f      adi f		// 78, skip if x is not 0
+303: 4c      rit		// 79
 341: 9d      t 31d
 
 
